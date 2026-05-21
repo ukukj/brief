@@ -1,0 +1,21 @@
+# 빌드 산출물
+/bin/
+morning-brief
+authorize
+*.exe
+
+# 로컬 토큰/변수
+token.json
+*.local.yaml
+.env
+
+# OS/IDE
+.DS_Store
+.idea/
+
+# Claude Code 로컬 설정
+.claude
+
+# docs
+docs/
+.omc/
