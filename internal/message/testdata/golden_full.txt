@@ -1,0 +1,12 @@
+🌤 오늘 아침 브리핑
+
+[날씨] 구름많음 · 14℃ (최저 11 / 최고 23)
+강수 없음
+
+[뉴스]
+1. 첫번째 기사
+https://news.example/1
+2. 두번째 기사
+https://news.example/2
+
+⚠️ 일부 정보 누락: weather partial

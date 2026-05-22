@@ -10,8 +10,9 @@ import (
 )
 
 // Format은 본문 텍스트를 반환한다. f가 nil이면 날씨 섹션을 생략한다.
-// 강수 줄은 당일 종합: 강수 예보 시 "강수 {Kind} HH–HH시[, HH–HH시…] · 최대 P%",
-// 무강수 시 "강수 없음 · 최대 P%". 첫 줄(흐림·온도·최저/최고)은 슬롯 기준 그대로.
+// 강수 줄은 활동시간대(08–22시) 종합: 강수 예보 시
+// "강수 {Kind} HH–HH시[, HH–HH시…] · 최대 P%", 무강수 시 "강수 없음".
+// 첫 줄(흐림·온도·최저/최고)은 슬롯 기준 그대로.
 // 뉴스는 제목 다음 줄에 기사 URL을 포함한다(텔레그램이 자동 링크화).
 // partialErrs가 있으면 경고 줄을 덧붙인다.
 func Format(f *weather.Forecast, hs []news.Headline, partialErrs []string) string {
@@ -39,7 +40,7 @@ func Format(f *weather.Forecast, hs []news.Headline, partialErrs []string) strin
 
 func formatPrecipLine(f *weather.Forecast) string {
 	if f.PrecipKind == "" || len(f.PrecipRanges) == 0 {
-		return fmt.Sprintf("강수 없음 · 최대 %d%%\n", f.PrecipMaxPOP)
+		return "강수 없음\n"
 	}
 	parts := make([]string, 0, len(f.PrecipRanges))
 	for _, r := range f.PrecipRanges {

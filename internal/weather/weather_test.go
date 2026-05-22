@@ -265,8 +265,11 @@ func TestFetch_Precip_MultipleRanges(t *testing.T) {
 	}
 }
 
-func TestFetch_Precip_RangeExtendsTo23(t *testing.T) {
-	// 22–23 비 → 마지막 시각까지 inRange 상태로 끝나는 경계 케이스: 구간 [22,23].
+func TestFetch_Precip_WindowClipsLateNight(t *testing.T) {
+	// 비가 22시와 23시에 예보된 상황.
+	// 강수 종합은 08~22시만 보므로 23시 비는 무시된다.
+	// 기대: 강수 구간은 22시 한 칸({22,22}), 최대 강수확률도
+	// 22시의 80%만 — 23시의 90%는 범위 밖이라 제외된다.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"response":{"header":{"resultCode":"00","resultMsg":"OK"},` +
@@ -276,7 +279,7 @@ func TestFetch_Precip_RangeExtendsTo23(t *testing.T) {
 			`{"category":"PTY","fcstDate":"20260518","fcstTime":"2200","fcstValue":"1"},` +
 			`{"category":"POP","fcstDate":"20260518","fcstTime":"2200","fcstValue":"80"},` +
 			`{"category":"PTY","fcstDate":"20260518","fcstTime":"2300","fcstValue":"1"},` +
-			`{"category":"POP","fcstDate":"20260518","fcstTime":"2300","fcstValue":"80"}` +
+			`{"category":"POP","fcstDate":"20260518","fcstTime":"2300","fcstValue":"90"}` +
 			`]}}}}`))
 	}))
 	defer srv.Close()
@@ -288,11 +291,43 @@ func TestFetch_Precip_RangeExtendsTo23(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(f.PrecipRanges) != 1 || f.PrecipRanges[0] != (HourRange{Start: 22, End: 23}) {
-		t.Errorf("PrecipRanges = %+v, want [{22 23}]", f.PrecipRanges)
+	if len(f.PrecipRanges) != 1 || f.PrecipRanges[0] != (HourRange{Start: 22, End: 22}) {
+		t.Errorf("PrecipRanges = %+v, want [{22 22}] (23시는 윈도우 밖)", f.PrecipRanges)
 	}
 	if f.PrecipMaxPOP != 80 {
-		t.Errorf("PrecipMaxPOP = %d, want 80", f.PrecipMaxPOP)
+		t.Errorf("PrecipMaxPOP = %d, want 80 (23시=90은 윈도우 밖)", f.PrecipMaxPOP)
+	}
+}
+
+func TestFetch_Precip_WindowExcludesEarlyMorning(t *testing.T) {
+	// 새벽 03–05시에만 비. 활동시간대 윈도우(08–22시) 밖이라 종합에서 제외 →
+	// 무강수(PrecipKind="", PrecipRanges 빈, PrecipMaxPOP=0)로 처리.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"response":{"header":{"resultCode":"00","resultMsg":"OK"},` +
+			`"body":{"items":{"item":[` +
+			`{"category":"PTY","fcstDate":"20260518","fcstTime":"0300","fcstValue":"1"},` +
+			`{"category":"POP","fcstDate":"20260518","fcstTime":"0300","fcstValue":"60"},` +
+			`{"category":"PTY","fcstDate":"20260518","fcstTime":"0400","fcstValue":"1"},` +
+			`{"category":"POP","fcstDate":"20260518","fcstTime":"0400","fcstValue":"70"},` +
+			`{"category":"PTY","fcstDate":"20260518","fcstTime":"0500","fcstValue":"1"},` +
+			`{"category":"POP","fcstDate":"20260518","fcstTime":"0500","fcstValue":"50"}` +
+			`]}}}}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "wkey", 60, 127)
+	c.Now = func() string { return "20260518:0800" }
+
+	f, err := c.Fetch(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if f.PrecipKind != "" || len(f.PrecipRanges) != 0 {
+		t.Errorf("early-morning rain must be excluded: Kind=%q Ranges=%+v", f.PrecipKind, f.PrecipRanges)
+	}
+	if f.PrecipMaxPOP != 0 {
+		t.Errorf("PrecipMaxPOP = %d, want 0 (새벽 POP는 윈도우 밖)", f.PrecipMaxPOP)
 	}
 }
 

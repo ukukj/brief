@@ -61,8 +61,11 @@ func TestFormat_Precip_None(t *testing.T) {
 		PrecipMaxPOP: 10, PrecipKind: "", PrecipRanges: nil,
 	}
 	text := Format(f, nil, nil)
-	if !strings.Contains(text, "강수 없음 · 최대 10%\n") {
+	if !strings.Contains(text, "강수 없음\n") {
 		t.Errorf("expected no-precip line, got:\n%s", text)
+	}
+	if strings.Contains(text, "최대") {
+		t.Errorf("no-precip line must not show POP, got:\n%s", text)
 	}
 }
 

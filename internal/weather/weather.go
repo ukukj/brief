@@ -20,17 +20,24 @@ type HourRange struct {
 
 // Forecast는 아침 발송에 쓸 핵심 예보값.
 //
-// TempC/Sky는 기준 시각(Now) 슬롯의 값이고, MinTempC/MaxTempC와
-// PrecipMaxPOP/PrecipKind/PrecipRanges는 당일(wantDate) 전체를 종합한다.
+// TempC/Sky는 기준 시각(Now) 슬롯의 값, MinTempC/MaxTempC는 당일 전체,
+// PrecipMaxPOP/PrecipKind/PrecipRanges는 당일 활동시간대(08–22시)를 종합한다.
 type Forecast struct {
 	TempC        int
 	Sky          string
 	MinTempC     int
 	MaxTempC     int
-	PrecipMaxPOP int         // 당일 시간대별 POP 중 최대값(%)
-	PrecipKind   string      // 강수 형태 라벨("비"/"눈"/"비/눈"/"소나기"). 무강수면 ""
-	PrecipRanges []HourRange // PTY!=0인 연속 시간 구간들(시작·종료시, 폐구간). 무강수면 빈 슬라이스
+	PrecipMaxPOP int         // 활동시간대(08–22시) POP 중 최대값(%)
+	PrecipKind   string      // 활동시간대 강수 형태 라벨("비"/"눈"/"비/눈"/"소나기"). 무강수면 ""
+	PrecipRanges []HourRange // 활동시간대 PTY!=0 연속 구간들(시작·종료시, 폐구간). 무강수면 빈 슬라이스
 }
+
+// 일일 강수 종합 윈도우: 사용자 활동 시간대(08–22시, 폐구간).
+// 새벽·심야의 무의미한 강수확률/형태를 종합에서 제외한다.
+const (
+	activeStartHour = 8
+	activeEndHour   = 22
+)
 
 // Client는 기상청 단기예보 클라이언트.
 type Client struct {
@@ -84,8 +91,9 @@ type item struct {
 var skyText = map[string]string{"1": "맑음", "3": "구름많음", "4": "흐림"}
 var ptyText = map[string]string{"0": "없음", "1": "비", "2": "비/눈", "3": "눈", "4": "소나기"}
 
-// Fetch는 예보를 받아 기준 시각(Now)에 가장 가까운 슬롯의 값(TempC/Sky)과
-// 당일 전체의 종합값(MinTempC/MaxTempC/PrecipMaxPOP/PrecipKind/PrecipRanges)을 파싱한다.
+// Fetch는 예보를 받아 기준 시각(Now)에 가장 가까운 슬롯의 값(TempC/Sky),
+// 당일 전체의 MinTempC/MaxTempC, 활동시간대(08–22시)의 강수 종합값
+// (PrecipMaxPOP/PrecipKind/PrecipRanges)을 파싱한다.
 func (c *Client) Fetch(ctx context.Context) (Forecast, error) {
 	q := url.Values{}
 	q.Set("serviceKey", c.serviceKey)
@@ -196,13 +204,14 @@ func (c *Client) Fetch(ctx context.Context) (Forecast, error) {
 		}
 	}
 
-	// 일일 강수 종합: 최대 POP / 첫 등장 PTY 라벨 / 연속 PTY!=0 구간들.
+	// 활동시간대(08–22시) 강수 종합: 최대 POP / 첫 등장 PTY 라벨 / 연속 PTY!=0 구간들.
+	// 새벽·심야 시간대는 종합에서 제외한다.
 	maxPOP := 0
 	var ranges []HourRange
 	firstPTY := ""
 	inRange := false
 	start := 0
-	for h := 0; h < 24; h++ {
+	for h := activeStartHour; h <= activeEndHour; h++ {
 		e := dayHours[h]
 		if e.havePop {
 			if v := atoiSafe(e.pop); v > maxPOP {
@@ -223,7 +232,7 @@ func (c *Client) Fetch(ctx context.Context) (Forecast, error) {
 		}
 	}
 	if inRange {
-		ranges = append(ranges, HourRange{Start: start, End: 23})
+		ranges = append(ranges, HourRange{Start: start, End: activeEndHour})
 	}
 
 	f.PrecipMaxPOP = maxPOP
