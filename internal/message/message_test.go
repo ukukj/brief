@@ -69,6 +69,44 @@ func TestFormat_Precip_None(t *testing.T) {
 	}
 }
 
+func TestFormat_Headline(t *testing.T) {
+	cases := []struct {
+		name string
+		f    *weather.Forecast
+		want string
+	}{
+		{"sunny", &weather.Forecast{Sky: "맑음"}, "☀️ 맑음\n\n"},
+		{"cloudy", &weather.Forecast{Sky: "구름많음"}, "⛅ 구름많음\n\n"},
+		{"overcast", &weather.Forecast{Sky: "흐림"}, "☁️ 흐림\n\n"},
+		{
+			"rain wins over sky",
+			&weather.Forecast{
+				Sky: "흐림", PrecipKind: "비",
+				PrecipRanges: []weather.HourRange{{Start: 8, End: 10}},
+			},
+			"🌧 비\n\n",
+		},
+		{
+			"snow",
+			&weather.Forecast{
+				Sky: "흐림", PrecipKind: "눈",
+				PrecipRanges: []weather.HourRange{{Start: 8, End: 10}},
+			},
+			"❄️ 눈\n\n",
+		},
+		{"nil forecast falls back", nil, "🌤 아침 브리핑\n\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			text := Format(tc.f, nil, nil)
+			if !strings.HasPrefix(text, tc.want) {
+				t.Errorf("headline mismatch:\n--- got prefix ---\n%q\n--- want ---\n%q",
+					text[:min(len(text), len(tc.want)+10)], tc.want)
+			}
+		})
+	}
+}
+
 func TestFormat_NoWeather(t *testing.T) {
 	hs := []news.Headline{{Title: "기사", Link: "https://x/1"}}
 	text := Format(nil, hs, nil)
